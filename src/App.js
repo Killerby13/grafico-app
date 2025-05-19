@@ -1,114 +1,81 @@
 import React, { useState } from 'react';
-import { LineChart, Line, PieChart, Pie, Cell, Tooltip, XAxis, YAxis, CartesianGrid, ResponsiveContainer } from 'recharts';
-import DatePicker from 'react-datepicker';
-import 'react-datepicker/dist/react-datepicker.css';
-
-const datosVentas = [
-  { mes: 'Enero', ventas: 4000, categoria: 'Electrónica' },
-  { mes: 'Febrero', ventas: 3000, categoria: 'Hogar' },
-  { mes: 'Marzo', ventas: 2000, categoria: 'Electrónica' },
-  { mes: 'Abril', ventas: 2780, categoria: 'Moda' },
-  { mes: 'Mayo', ventas: 1890, categoria: 'Electrónica' },
-  { mes: 'Junio', ventas: 2390, categoria: 'Moda' },
-  { mes: 'Julio', ventas: 3490, categoria: 'Hogar' }
-];
-
-const resumenPorCategoria = [
-  { name: 'Electrónica', value: 8000 },
-  { name: 'Hogar', value: 6490 },
-  { name: 'Moda', value: 5170 }
-];
-
-const colores = ['#0088FE', '#00C49F', '#FFBB28'];
+import * as XLSX from 'xlsx';
+import Papa from 'papaparse';
+import { LineChart, Line, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 function App() {
-  const [categoriaSeleccionada, setCategoriaSeleccionada] = useState('Todas');
-  const [fechaInicio, setFechaInicio] = useState(new Date('2024-01-01'));
-  const [fechaFin, setFechaFin] = useState(new Date('2024-12-31'));
+  const [data, setData] = useState([]);
+  const [columnas, setColumnas] = useState([]);
 
-  const filtrarDatos = () => {
-    let filtrados = datosVentas;
+  const handleFileUpload = (e) => {
+    const archivo = e.target.files[0];
+    const nombre = archivo.name.toLowerCase();
 
-    if (categoriaSeleccionada !== 'Todas') {
-      filtrados = filtrados.filter(item => item.categoria === categoriaSeleccionada);
+    if (nombre.endsWith('.xlsx') || nombre.endsWith('.xls')) {
+      const reader = new FileReader();
+      reader.onload = (evt) => {
+        const workbook = XLSX.read(evt.target.result, { type: 'binary' });
+        const hoja = workbook.SheetNames[0];
+        const datos = XLSX.utils.sheet_to_json(workbook.Sheets[hoja]);
+        setData(datos);
+        setColumnas(Object.keys(datos[0] || {}));
+      };
+      reader.readAsBinaryString(archivo);
+    } else if (nombre.endsWith('.csv')) {
+      Papa.parse(archivo, {
+        header: true,
+        dynamicTyping: true,
+        complete: (results) => {
+          setData(results.data);
+          setColumnas(Object.keys(results.data[0] || {}));
+        }
+      });
+    } else {
+      alert('Solo se permiten archivos .csv o .xlsx');
     }
-
-    return filtrados;
   };
 
   return (
-    <div className="container mt-5">
-      <h1 className="mb-4">📈 Panel de Ventas - React Demo</h1>
+    <div style={{ padding: 40 }}>
+      <h2>📂 Cargar archivo (.csv / .xlsx)</h2>
+      <input type="file" accept=".csv, .xlsx" onChange={handleFileUpload} className="form-control" />
 
-      {/* Filtros */}
-      <div className="row mb-4">
-        <div className="col-md-4">
-          <label>📂 Categoría</label>
-          <select className="form-control" onChange={e => setCategoriaSeleccionada(e.target.value)}>
-            <option value="Todas">Todas</option>
-            <option value="Electrónica">Electrónica</option>
-            <option value="Hogar">Hogar</option>
-            <option value="Moda">Moda</option>
-          </select>
-        </div>
-        <div className="col-md-4">
-          <label>📅 Desde</label>
-          <DatePicker selected={fechaInicio} onChange={setFechaInicio} className="form-control" />
-        </div>
-        <div className="col-md-4">
-          <label>📅 Hasta</label>
-          <DatePicker selected={fechaFin} onChange={setFechaFin} className="form-control" />
-        </div>
-      </div>
+      {data.length > 0 && columnas.length >= 2 && (
+        <>
+          <h4 style={{ marginTop: 40 }}>📈 Vista previa (primeras columnas)</h4>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={data.slice(0, 20)}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis dataKey={columnas[0]} />
+              <YAxis />
+              <Tooltip />
+              <Line type="monotone" dataKey={columnas[1]} stroke="#8884d8" />
+            </LineChart>
+          </ResponsiveContainer>
 
-      {/* Gráfica de línea */}
-      <h4>📊 Ventas por Mes</h4>
-      <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={filtrarDatos()}>
-          <CartesianGrid strokeDasharray="3 3" />
-          <XAxis dataKey="mes" />
-          <YAxis />
-          <Tooltip />
-          <Line type="monotone" dataKey="ventas" stroke="#8884d8" />
-        </LineChart>
-      </ResponsiveContainer>
-
-      {/* Gráfica de torta */}
-      <h4 className="mt-5">🥧 Ventas por Categoría</h4>
-      <ResponsiveContainer width="100%" height={300}>
-        <PieChart>
-          <Pie data={resumenPorCategoria} dataKey="value" nameKey="name" outerRadius={100} label>
-            {resumenPorCategoria.map((entry, index) => (
-              <Cell key={index} fill={colores[index % colores.length]} />
-            ))}
-          </Pie>
-          <Tooltip />
-        </PieChart>
-      </ResponsiveContainer>
-
-      {/* Tabla de datos */}
-      <h4 className="mt-5">📋 Detalle de Ventas</h4>
-      <table className="table table-striped">
-        <thead>
-          <tr>
-            <th>Mes</th>
-            <th>Ventas</th>
-            <th>Categoría</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filtrarDatos().map((item, index) => (
-            <tr key={index}>
-              <td>{item.mes}</td>
-              <td>${item.ventas}</td>
-              <td>{item.categoria}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+          <h4 className="mt-5">📋 Datos cargados (primeras filas)</h4>
+          <table className="table table-bordered">
+            <thead>
+              <tr>
+                {columnas.map((col, idx) => (
+                  <th key={idx}>{col}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {data.slice(0, 5).map((row, idx) => (
+                <tr key={idx}>
+                  {columnas.map((col, jdx) => (
+                    <td key={jdx}>{row[col]}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
     </div>
   );
 }
 
 export default App;
-
