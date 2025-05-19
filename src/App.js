@@ -6,21 +6,22 @@ import {
   BarChart, Bar,
   AreaChart, Area,
   PieChart, Pie, Cell,
-  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
 } from 'recharts';
 
 const colores = ['#8884d8', '#82ca9d', '#ffc658', '#ff8042'];
 
-// Función para verificar si un valor es una fecha válida
-const esFechaValida = (valor) => {
-  const fecha = new Date(valor);
-  return !isNaN(fecha.getTime());
-};
-
-// Función para mostrar fecha formateada como dd/mm/yyyy
+// Función para formatear fecha
 const formatearFecha = (valor) => {
   const fecha = new Date(valor);
-  return fecha.toLocaleDateString('es-ES');
+  return isNaN(fecha.getTime()) ? valor : fecha.toLocaleDateString('es-ES');
+};
+
+// Mostrar cualquier valor como string legible
+const mostrarValor = (valor) => {
+  if (valor instanceof Date) return formatearFecha(valor);
+  if (typeof valor === 'object') return JSON.stringify(valor);
+  return valor?.toString() ?? '';
 };
 
 function App() {
@@ -34,27 +35,32 @@ function App() {
     const archivo = e.target.files[0];
     const nombre = archivo.name.toLowerCase();
 
+    const procesarDatos = (datos) => {
+      const cols = Object.keys(datos[0] || {});
+      const primeraColumna = cols[0]; // Solo la primera se trata como fecha
+
+      datos.forEach(row => {
+        if (row[primeraColumna]) {
+          const posibleFecha = new Date(row[primeraColumna]);
+          if (!isNaN(posibleFecha.getTime())) {
+            row[primeraColumna] = posibleFecha;
+          }
+        }
+      });
+
+      setData(datos);
+      setColumnas(cols);
+      setColX(primeraColumna);
+      setColY(cols[1] || '');
+    };
+
     if (nombre.endsWith('.xlsx') || nombre.endsWith('.xls')) {
       const reader = new FileReader();
       reader.onload = (evt) => {
         const workbook = XLSX.read(evt.target.result, { type: 'binary' });
         const hoja = workbook.SheetNames[0];
         const datos = XLSX.utils.sheet_to_json(workbook.Sheets[hoja]);
-
-        // Convertir columnas de fechas
-        datos.forEach(row => {
-          for (const key in row) {
-            if (esFechaValida(row[key])) {
-              row[key] = new Date(row[key]);
-            }
-          }
-        });
-
-        setData(datos);
-        const cols = Object.keys(datos[0] || {});
-        setColumnas(cols);
-        setColX(cols[0] || '');
-        setColY(cols[1] || '');
+        procesarDatos(datos);
       };
       reader.readAsBinaryString(archivo);
     } else if (nombre.endsWith('.csv')) {
@@ -62,22 +68,7 @@ function App() {
         header: true,
         dynamicTyping: true,
         complete: (results) => {
-          const datos = results.data;
-
-          // Convertir columnas de fechas
-          datos.forEach(row => {
-            for (const key in row) {
-              if (esFechaValida(row[key])) {
-                row[key] = new Date(row[key]);
-              }
-            }
-          });
-
-          setData(datos);
-          const cols = Object.keys(datos[0] || {});
-          setColumnas(cols);
-          setColX(cols[0] || '');
-          setColY(cols[1] || '');
+          procesarDatos(results.data);
         }
       });
     } else {
@@ -88,47 +79,58 @@ function App() {
   const renderGrafico = () => {
     if (!colX || !colY || data.length === 0) return null;
 
-    const datosFiltrados = data.filter(row => row[colX] !== undefined && row[colY] !== undefined);
+    const datosFiltrados = data
+      .filter(row => row[colX] !== undefined && row[colY] !== undefined)
+      .slice(0, 30);
 
     switch (tipoGrafico) {
       case 'line':
         return (
-          <LineChart data={datosFiltrados.slice(0, 30)}>
+          <LineChart data={datosFiltrados}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey={colX} tickFormatter={(tick) => tick instanceof Date ? formatearFecha(tick) : tick} />
+            <XAxis dataKey={colX} tickFormatter={mostrarValor} />
             <YAxis />
-            <Tooltip labelFormatter={(label) => label instanceof Date ? formatearFecha(label) : label} />
+            <Tooltip
+              labelFormatter={(label) => `X: ${mostrarValor(label)}`}
+              formatter={(value) => mostrarValor(value)}
+            />
             <Line type="monotone" dataKey={colY} stroke="#8884d8" />
           </LineChart>
         );
       case 'bar':
         return (
-          <BarChart data={datosFiltrados.slice(0, 30)}>
+          <BarChart data={datosFiltrados}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey={colX} tickFormatter={(tick) => tick instanceof Date ? formatearFecha(tick) : tick} />
+            <XAxis dataKey={colX} tickFormatter={mostrarValor} />
             <YAxis />
-            <Tooltip labelFormatter={(label) => label instanceof Date ? formatearFecha(label) : label} />
+            <Tooltip
+              labelFormatter={(label) => `X: ${mostrarValor(label)}`}
+              formatter={(value) => mostrarValor(value)}
+            />
             <Bar dataKey={colY} fill="#82ca9d" />
           </BarChart>
         );
       case 'area':
         return (
-          <AreaChart data={datosFiltrados.slice(0, 30)}>
+          <AreaChart data={datosFiltrados}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey={colX} tickFormatter={(tick) => tick instanceof Date ? formatearFecha(tick) : tick} />
+            <XAxis dataKey={colX} tickFormatter={mostrarValor} />
             <YAxis />
-            <Tooltip labelFormatter={(label) => label instanceof Date ? formatearFecha(label) : label} />
+            <Tooltip
+              labelFormatter={(label) => `X: ${mostrarValor(label)}`}
+              formatter={(value) => mostrarValor(value)}
+            />
             <Area type="monotone" dataKey={colY} stroke="#ffc658" fill="#ffc658" />
           </AreaChart>
         );
       case 'pie':
         const pieData = datosFiltrados
-          .slice(0, 10)
           .map(row => ({
-            name: row[colX] instanceof Date ? formatearFecha(row[colX]) : row[colX],
+            name: mostrarValor(row[colX]),
             value: row[colY]
           }))
           .filter(item => typeof item.value === 'number');
+
         return (
           <PieChart>
             <Pie data={pieData} dataKey="value" nameKey="name" outerRadius={100} label>
@@ -195,9 +197,7 @@ function App() {
               {data.slice(0, 5).map((row, idx) => (
                 <tr key={idx}>
                   {columnas.map((col, jdx) => (
-                    <td key={jdx}>
-                      {row[col] instanceof Date ? formatearFecha(row[col]) : row[col]}
-                    </td>
+                    <td key={jdx}>{mostrarValor(row[col])}</td>
                   ))}
                 </tr>
               ))}
